@@ -20,8 +20,10 @@ def input_bytes(text, encoded, path):
             raise DataError('ENCODING', '原始文件编码无效') from error
     elif text is not None:
         raw = text.encode()
-    else:
+    elif path is not None:
         return path.read_bytes()
+    else:
+        raise DataError('CONTRACT', '后继更订必须显式提交更订来源')
     if len(raw) > MAX_BYTES:
         raise DataError('LIMIT', '单个文件不能超过 128 KiB', 413)
     return raw
@@ -42,6 +44,20 @@ class Paired(Source):
 
     def ledger(self):
         return input_bytes(self.book, self.book_base64, SAMPLE_ROOT/'external.csv')
+
+
+class Cutover(BaseModel):
+    """后继更订必须显式带来源；缺省即拒绝，绝不静默套用样例。"""
+    data: CsvText | None = None
+    data_base64: EncodedCsv | None = None
+    book: CsvText | None = None
+    book_base64: EncodedCsv | None = None
+
+    def raw(self):
+        return input_bytes(self.data, self.data_base64, None)
+
+    def ledger(self):
+        return input_bytes(self.book, self.book_base64, None)
 
 
 class Review(BaseModel):

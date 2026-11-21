@@ -11,4 +11,6 @@ REASONS = {
     'REVIEW_NOTE': '有差异时须填写复核意见', 'REVIEW_DECISION': '复核结论无效',
 }
 
-REASONS.update({'ROAD_FORMAT': '道路字段格式', 'ROAD_CONFLICT': '路段定义冲突', 'ROAD_UNREACHABLE': '无可通行路径', 'DATE': '日期格式无效', 'REV_BLOCKED': '较新来源尚未采信'})
+REASONS.update({'ROAD_FORMAT': '道路字段格式', 'ROAD_CONFLICT': '路段定义冲突', 'ROAD_UNREACHABLE': '无可通行路径', 'DATE': '日期格式无效', 'REV_BLOCKED': '较新来源尚未采信',
+    'CUTOVER_NO_CHANGE': '更订来源与前版一致', 'CUTOVER_CYCLE': '后继链不能成环',
+    'CUTOVER_BRANCH': '该批次已有后继版本', 'CUTOVER_UNLINKED': '两批没有后继关系'})

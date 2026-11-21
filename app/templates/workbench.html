@@ -53,6 +53,14 @@
       <div id="tools" class="filters" hidden><label>筛选 <input id="filter" type="search" placeholder="踏勘单 / 原因" maxlength="80"></label>
         <label id="only-differences" hidden><input id="differences" type="checkbox"> 只看差异</label><output id="shown"></output></div>
       <div class="scroll" id="grid-data"><p class="empty">运行本班样例</p></div>
+      <form id="cutover-form" class="panel__body" hidden>
+        <p>以当前批次为前版，提交更订来源生成后继版本。整批切换失败时旧批次与凭据原样保留；KEPT 各笔不重审，RECAST/NEW/WITHDRAWN 各笔需重算并重新复核。</p>
+        <label>更订来源文件 <input id="cutover-source-file" type="file" accept=".csv,text/csv"></label>
+        <textarea id="cutover-source-csv" aria-label="更订来源 CSV" rows="3"></textarea>
+        <label>更订外部账（可留空沿用前版） <input id="cutover-book-file" type="file" accept=".csv,text/csv"></label>
+        <textarea id="cutover-book-csv" aria-label="更订外部账 CSV" rows="2"></textarea>
+        <div class="actions"><button type="submit" class="btn btn--primary">生成后继版本</button></div>
+      </form>
       <form id="review" class="panel__body" hidden>
         <label>复核意见 <textarea id="review-note" maxlength="500" rows="2"></textarea></label>
         <div class="actions"><label>结论 <select id="decision"><option>确认</option><option>退回</option></select></label>
@@ -63,6 +71,6 @@
       <footer class="statusbar"><span id="state" role="status">等待输入</span><a href="/openapi.json">接口</a><span>UTC</span></footer>
     </div>
   </div>
-  <script type="application/json" id="settings">{{ {'reasons': reasons, 'tabs': tabs, 'unit': unit, 'key': key}|tojson }}</script>
+  <script type="application/json" id="settings">{{ {'reasons': reasons, 'tabs': tabs, 'unit': unit, 'key': key, 'cutover': CUTOVER_STATES}|tojson }}</script>
 </body>
 </html>

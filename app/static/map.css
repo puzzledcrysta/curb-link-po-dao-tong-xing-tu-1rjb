@@ -62,7 +62,17 @@
     td li { max-width: 24ch; overflow-wrap: anywhere; }
     .state { display: inline-block; color: var(--ok); font-size: 12px; white-space: nowrap; }
     .state.problem { color: var(--bad); }
+    .state.warn { color: var(--warn, #9a6a12); }
+    .state.muted { color: var(--muted); }
     .state::before { content: ""; background: currentColor; border-radius: 50%; display: inline-block; width: 7px; height: 7px; margin-right: 7px; }
+    .lineage { margin: 0 0 var(--gap); padding: var(--pad); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 13px; }
+    .lineage header { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .lineage strong { font-variant-numeric: tabular-nums; }
+    .lineage ol { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 8px 0 0; }
+    .lineage li { padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 99px; cursor: pointer; font-variant-numeric: tabular-nums; }
+    .lineage li[aria-current="true"] { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
+    .lineage .summary { display: flex; flex-wrap: wrap; gap: 12px; color: var(--muted); }
+    .lineage .summary b { color: var(--ink); }
     .empty { margin: var(--pad); color: var(--muted); }
     #signal { max-height: 358px; overflow: auto; }
     .signal dl, .signal ol { padding: 0; margin: 0; }

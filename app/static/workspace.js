@@ -24,7 +24,8 @@ function filterTable() {
   const query = filter.value.trim().toLocaleLowerCase();
   const selected = rows.filter(row => {
     if (stage === 'reconcile' && differences.checked && row.code === 'MATCH') return false;
-    return !query || [row.key,row.id,row.line,row.code,settings.reasons[row.code],row.detail,row.note,row.kind]
+    return !query || [row.key,row.id,row.line,row.code,settings.reasons[row.code],row.detail,row.note,row.kind,row.state,
+      ...(row.changed_fields || [])]
       .some(value => String(value ?? '').toLocaleLowerCase().includes(query));
   });
   byId('shown').textContent = `${selected.length} / ${rows.length}`;
@@ -41,6 +42,62 @@ function notice(message, error = false) {
 
 function tag(code) {
   return el('span', settings.reasons[code] || code, code === 'MATCH' ? 'state' : 'state problem');
+}
+
+const CUTOVER_CLASS = {KEPT: 'state', RECAST: 'state problem', NEW: 'state warn', WITHDRAWN: 'state muted'};
+
+function cutoverTag(row) {
+  return el('span', row.detail, CUTOVER_CLASS[row.state] || 'state');
+}
+
+function lineageBanner(links) {
+  const box = el('div', undefined, 'lineage');
+  const head = el('header');
+  head.append(el('span', '后继链'));
+  const order = [];
+  const byParent = new Map(links.map(link => [link.predecessor, link.successor]));
+  const children = new Set(links.map(link => link.successor));
+  let cursor = links.find(link => !children.has(link.predecessor))?.predecessor;
+  const guard = new Set();
+  while (cursor && !guard.has(cursor)) {
+    guard.add(cursor);
+    order.push(cursor);
+    cursor = byParent.get(cursor);
+  }
+  const list = el('ol');
+  for (const runId of order) {
+    const item = el('li', runId.slice(0, 9));
+    item.title = runId;
+    if (result && runId === result.manifest.run_id) item.setAttribute('aria-current', 'true');
+    item.addEventListener('click', async () => {
+      try {
+        const [past, original] = await Promise.all([
+          query(`/api/runs/${runId}`), query(`/api/runs/${runId}/source`),
+        ]);
+        inputs = original;
+        setRun(past);
+        notice('已打开该版本，旧凭据随批次保留');
+        await render();
+      } catch (error) { notice(error.message, true); }
+    });
+    list.append(item);
+  }
+  box.append(head, list);
+  return box;
+}
+
+function cutoverSummary(report) {
+  const counts = report.counts;
+  const box = el('div', undefined, 'lineage');
+  const summary = el('div', undefined, 'summary');
+  for (const state of ['KEPT', 'RECAST', 'NEW', 'WITHDRAWN']) {
+    const cell = el('span');
+    cell.append(el('b', String(counts[state] ?? 0)), ` ${settings.cutover[state]}`);
+    summary.append(cell);
+  }
+  const note = el('p', `其中 ${counts.recheck_required} 笔因来源变化需重算并重新复核；KEPT 各笔沿用已签字结论，不触发重审。`);
+  box.append(summary, note);
+  return box;
 }
 
 
@@ -93,6 +150,7 @@ async function render() {
   const stage = selected;
   byId('phase').textContent = settings.tabs[stage];
   byId('review').hidden = true;
+  byId('cutover-form').hidden = true;
   for (const link of links) {
     if (link.dataset.module === stage) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
@@ -150,6 +208,33 @@ async function render() {
         return button;
       }]];
       rows = runs;
+    } else if (stage === 'cutover') {
+      const lineage = await query('/api/cutover/lineage');
+      const links = lineage.links;
+      const currentId = result.manifest.run_id;
+      body.replaceChildren(lineageBanner(links));
+      const predecessorId = links.find(item => item.successor === currentId)?.predecessor;
+      const columns = [key, ['修订', 'revision', 'num'], ['有效性', cutoverTag],
+        ['变化字段', row => (row.changed_fields || []).join('、') || '—'],
+        ['需重算复核', row => row.recheck_required ? '是' : '否']];
+      let rows = [];
+      if (predecessorId) {
+        const comparison = await query(`/api/cutover/${predecessorId}/${currentId}`);
+        body.append(cutoverSummary(comparison));
+        rows = comparison.rows;
+      } else {
+        body.append(el('p', '当前批次尚未更订。提交下方更订来源即可生成后继版本，旧批次与凭据会原样保留。', 'empty'));
+      }
+      const holder = el('div');
+      table(holder, columns, rows);
+      body.append(holder);
+      byId('cutover-form').hidden = false;
+      if (ticket !== renderEpoch) return;
+      byId('tools').hidden = false;
+      byId('only-differences').hidden = true;
+      activeView = {stage, columns, rows};
+      filterTable();
+      return;
     } else {
       const timeline = await query(`/api/review/${id}`);
       view = [['版本','version','num'], ['结论','decision'], ['复核意见','note'], ['登记 UTC','changed']];
@@ -242,5 +327,50 @@ byId('review').addEventListener('submit', async event => {
     notice(error.message, true);
     if (error.status === 409) await render();
   }
+});
+const cutoverUploads = new Map();
+for (const name of ['source', 'book']) {
+  byId(`cutover-${name}-file`).addEventListener('change', async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const [text, bytes] = await readInput(file);
+      byId(`cutover-${name}-csv`).value = text;
+      cutoverUploads.set(name, {text, bytes});
+      notice(`已读取更订${name === 'source' ? '来源' : '外部账'} ${file.name}`);
+    } catch (error) {
+      event.target.value = '';
+      notice(error.message, true);
+    }
+  });
+}
+byId('cutover-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!result) { notice('请先运行一个批次'); return; }
+  const predecessor = result.manifest.run_id;
+  const payload = {};
+  const sourceText = byId('cutover-source-csv').value;
+  const sourceUpload = cutoverUploads.get('source');
+  if (sourceUpload && sourceText === sourceUpload.text) payload.data_base64 = encodeInput(sourceUpload.bytes);
+  else payload.data = sourceText;
+  const bookText = byId('cutover-book-csv').value;
+  const bookUpload = cutoverUploads.get('book');
+  if (bookUpload && bookText === bookUpload.text) payload.book_base64 = encodeInput(bookUpload.bytes);
+  else if (bookText.length) payload.book = bookText;
+  const button = event.target.querySelector('button[type=submit]');
+  button.disabled = true;
+  ++renderEpoch;
+  notice('正在生成后继版本');
+  try {
+    const report = await query(`/api/cutover/${predecessor}`, payload);
+    setRun(report);
+    const counts = report.cutover.counts;
+    notice(`后继版本已生成：${counts.KEPT} 笔仍有效，${counts.recheck_required} 笔需重算复核`);
+    selected = 'cutover';
+    location.hash = '#cutover';
+    await render();
+  } catch (error) {
+    notice(`切换未生效，旧批次保留：${error.message}`, true);
+  } finally { button.disabled = false; }
 });
 render();

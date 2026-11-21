@@ -13,6 +13,13 @@ CREATE TABLE IF NOT EXISTS reviews (
   decision TEXT NOT NULL, note TEXT NOT NULL, changed TEXT NOT NULL,
   PRIMARY KEY(run_id,version)
 );
+CREATE TABLE IF NOT EXISTS successions (
+  predecessor TEXT NOT NULL REFERENCES runs(id),
+  successor TEXT NOT NULL REFERENCES runs(id),
+  created TEXT NOT NULL,
+  PRIMARY KEY(predecessor)
+);
+CREATE INDEX IF NOT EXISTS idx_successions_successor ON successions(successor);
 """
 
 
